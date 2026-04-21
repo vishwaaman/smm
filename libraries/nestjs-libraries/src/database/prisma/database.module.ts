@@ -40,6 +40,11 @@ import { OAuthRepository } from '@gitroom/nestjs-libraries/database/prisma/oauth
 import { OAuthService } from '@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service';
 import { AnnouncementsRepository } from '@gitroom/nestjs-libraries/database/prisma/announcements/announcements.repository';
 import { AnnouncementsService } from '@gitroom/nestjs-libraries/database/prisma/announcements/announcements.service';
+import { AiProviderService } from '@gitroom/nestjs-libraries/ai-provider/ai-provider.service';
+import { ApprovalRepository } from '@gitroom/nestjs-libraries/database/prisma/approvals/approval.repository';
+import { ApprovalService } from '@gitroom/nestjs-libraries/database/prisma/approvals/approval.service';
+import { AgentConfigRepository } from '@gitroom/nestjs-libraries/database/prisma/agent-config/agent-config.repository';
+import { CustomAgentsService } from '@gitroom/nestjs-libraries/agents/custom-agents.service';
 
 @Global()
 @Module({
@@ -89,6 +94,11 @@ import { AnnouncementsService } from '@gitroom/nestjs-libraries/database/prisma/
     VideoManager,
     AnnouncementsRepository,
     AnnouncementsService,
+    AiProviderService,
+    ApprovalRepository,
+    ApprovalService,
+    AgentConfigRepository,
+    CustomAgentsService,
   ],
   get exports() {
     return this.providers;

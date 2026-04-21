@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
@@ -7,12 +7,14 @@ import { AddTeamMemberDto } from '@gitroom/nestjs-libraries/dtos/settings/add.te
 import { ShortlinkPreferenceDto } from '@gitroom/nestjs-libraries/dtos/settings/shortlink-preference.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import { AiProviderService } from '@gitroom/nestjs-libraries/ai-provider/ai-provider.service';
 
 @ApiTags('Settings')
 @Controller('/settings')
 export class SettingsController {
   constructor(
-    private _organizationService: OrganizationService
+    private _organizationService: OrganizationService,
+    private _aiProviderService: AiProviderService
   ) {}
 
   @Get('/team')
@@ -63,5 +65,35 @@ export class SettingsController {
       org.id,
       body.shortlink
     );
+  }
+
+  @Get('/ai-provider')
+  @CheckPolicies([AuthorizationActions.Create, Sections.ADMIN])
+  async getAiProvider(@GetOrgFromRequest() org: Organization) {
+    const data = await this._organizationService.getAiProvider(org.id);
+    return {
+      aiProvider: data?.aiProvider || 'openai',
+      openaiApiKey: data?.openaiApiKey ? `${data.openaiApiKey.slice(0, 8)}••••••••` : null,
+      anthropicApiKey: data?.anthropicApiKey ? `${data.anthropicApiKey.slice(0, 10)}••••••••` : null,
+      googleAiApiKey: data?.googleAiApiKey ? `${data.googleAiApiKey.slice(0, 8)}••••••••` : null,
+    };
+  }
+
+  @Put('/ai-provider')
+  @CheckPolicies([AuthorizationActions.Create, Sections.ADMIN])
+  async updateAiProvider(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { aiProvider?: string; openaiApiKey?: string; anthropicApiKey?: string; googleAiApiKey?: string }
+  ) {
+    return this._organizationService.updateAiProvider(org.id, body);
+  }
+
+  @Post('/ai-provider/test')
+  @CheckPolicies([AuthorizationActions.Create, Sections.ADMIN])
+  async testAiProvider(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { aiProvider?: string; openaiApiKey?: string; anthropicApiKey?: string; googleAiApiKey?: string }
+  ) {
+    return this._aiProviderService.testConnection(body);
   }
 }

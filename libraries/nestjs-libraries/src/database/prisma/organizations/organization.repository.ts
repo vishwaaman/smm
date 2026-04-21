@@ -419,4 +419,31 @@ export class OrganizationRepository {
       },
     });
   }
+
+  getAiProvider(orgId: string) {
+    return this._organization.model.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        aiProvider: true,
+        openaiApiKey: true,
+        anthropicApiKey: true,
+        googleAiApiKey: true,
+      },
+    });
+  }
+
+  updateAiProvider(
+    orgId: string,
+    data: {
+      aiProvider?: string;
+      openaiApiKey?: string | null;
+      anthropicApiKey?: string | null;
+      googleAiApiKey?: string | null;
+    }
+  ) {
+    return this._organization.model.organization.update({
+      where: { id: orgId },
+      data,
+    });
+  }
 }

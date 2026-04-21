@@ -130,4 +130,20 @@ export class OrganizationService {
       shortlink
     );
   }
+
+  getAiProvider(orgId: string) {
+    return this._organizationRepository.getAiProvider(orgId);
+  }
+
+  updateAiProvider(
+    orgId: string,
+    data: {
+      aiProvider?: string;
+      openaiApiKey?: string | null;
+      anthropicApiKey?: string | null;
+      googleAiApiKey?: string | null;
+    }
+  ) {
+    return this._organizationRepository.updateAiProvider(orgId, data);
+  }
 }

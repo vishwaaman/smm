@@ -75,6 +75,16 @@ export const useMenuItem = () => {
       path: '/agents',
     },
     {
+      name: 'AI Tools',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="currentColor" opacity="0" />
+          <path d="M9.5 6.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S11.83 8 11 8s-1.5-.67-1.5-1.5zM19 13l-1.5-1.5L19 10l-2-2-1.5 1.5L14 8l-2 2 1.5 1.5L12 13l2 2 1.5-1.5L17 15l2-2zm-8 0l-1.5-1.5L11 10 9 8 7.5 9.5 6 8 4 10l1.5 1.5L4 13l2 2 1.5-1.5L9 15l2-2z" fill="currentColor"/>
+        </svg>
+      ),
+      path: '/ai-tools',
+    },
+    {
       name: t('analytics', 'Analytics'),
       icon: (
         <svg

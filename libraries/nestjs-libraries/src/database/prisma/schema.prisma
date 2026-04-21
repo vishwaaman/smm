@@ -43,6 +43,11 @@ model Organization {
   webhooks            Webhooks[]
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
+  agentConfigs        AgentConfig[]
+  openaiApiKey        String?
+  anthropicApiKey     String?
+  googleAiApiKey      String?
+  aiProvider          String?
 
   @@index([apiKey])
   @@index([streakSince])
@@ -426,6 +431,7 @@ model Post {
   submittedForOrder          Orders?                   @relation(fields: [submittedForOrderId], references: [id])
   submittedForOrganization   Organization?             @relation("submittedForOrg", fields: [submittedForOrganizationId], references: [id])
   tags                       TagsPosts[]
+  approval                   PostApproval?
 
   @@index([group])
   @@index([deletedAt])
@@ -956,4 +962,34 @@ model Announcement {
   description String
   color       AnnouncementColor @default(INFO)
   createdAt   DateTime          @default(now())
+}
+
+model PostApproval {
+  id          String   @id @default(uuid())
+  postId      String   @unique
+  post        Post     @relation(fields: [postId], references: [id])
+  requestedBy String
+  approvedBy  String?
+  status      String   @default("PENDING")
+  reviewNote  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([postId])
+}
+
+model AgentConfig {
+  id             String       @id @default(uuid())
+  organizationId String
+  agentType      String
+  enabled        Boolean      @default(true)
+  systemPrompt   String?
+  settings       String       @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, agentType])
+  @@index([organizationId])
 }
