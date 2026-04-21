@@ -2,6 +2,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useAiProvider } from '@gitroom/frontend/components/settings/ai-provider.component';
 import clsx from 'clsx';
 
 type Tab = 'caption' | 'repurpose' | 'hashtags' | 'schedule' | 'image-gen' | 'approvals';
@@ -19,10 +20,16 @@ const PLATFORMS = ['Twitter', 'LinkedIn', 'Instagram', 'Facebook', 'TikTok'];
 
 export const AiToolsPanel = () => {
   const fetch = useFetch();
+  const { data: aiProviderData } = useAiProvider();
   const [activeTab, setActiveTab] = useState<Tab>('caption');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const hasAiKey =
+    !!aiProviderData?.openaiApiKey ||
+    !!aiProviderData?.anthropicApiKey ||
+    !!aiProviderData?.googleAiApiKey;
 
   const run = useCallback(async (endpoint: string, body: unknown) => {
     setLoading(true);
@@ -47,6 +54,26 @@ export const AiToolsPanel = () => {
   return (
     <div className="flex flex-col gap-[20px] p-[24px]">
       <h2 className="text-[22px] font-semibold">AI Tools</h2>
+
+      {aiProviderData && !hasAiKey && (
+        <div className="flex items-center gap-[12px] bg-yellow-500/10 border border-yellow-500/30 rounded-[4px] px-[16px] py-[12px]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500 shrink-0">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <div className="flex-1">
+            <div className="text-[13px] font-medium text-yellow-500">No AI API key configured</div>
+            <div className="text-[12px] text-textColor/60 mt-[2px]">
+              Add an OpenAI, Anthropic, or Google Gemini API key in{' '}
+              <a href="/settings" className="text-primary underline hover:opacity-80">
+                Settings → AI Provider Settings
+              </a>{' '}
+              to use these tools.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-[8px] flex-wrap">
         {tabs.map((tab) => (

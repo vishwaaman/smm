@@ -94,6 +94,13 @@ export class SettingsController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: { aiProvider?: string; openaiApiKey?: string; anthropicApiKey?: string; googleAiApiKey?: string }
   ) {
-    return this._aiProviderService.testConnection(body);
+    const saved = await this._organizationService.getAiProvider(org.id);
+    const merged = {
+      aiProvider: body.aiProvider || saved?.aiProvider,
+      openaiApiKey: body.openaiApiKey || saved?.openaiApiKey,
+      anthropicApiKey: body.anthropicApiKey || saved?.anthropicApiKey,
+      googleAiApiKey: body.googleAiApiKey || saved?.googleAiApiKey,
+    };
+    return this._aiProviderService.testConnection(merged);
   }
 }
