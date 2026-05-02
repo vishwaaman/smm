@@ -33,7 +33,7 @@ export const startMcp = async (app: INestApplication) => {
   };
 
   const mastra = await mastraService.mastra();
-  const agent = mastra.getAgent('postiz');
+  const agent = mastra.getAgent('postiz') as any;
   const tools = await agent.listTools();
 
   const serverConfig = {

@@ -71,7 +71,7 @@ export class CopilotController {
       Logger.warn('OpenAI API key not set, chat functionality will not work');
       return;
     }
-    const mastra = await this._mastraService.mastra();
+    const mastra = await this._mastraService.mastra(organization.id);
     const requestContext = new RequestContext<ChannelsContext>();
     requestContext.set(
       'integrations',
@@ -120,8 +120,8 @@ export class CopilotController {
     @GetOrgFromRequest() organization: Organization,
     @Param('thread') threadId: string
   ): Promise<any> {
-    const mastra = await this._mastraService.mastra();
-    const memory = await mastra.getAgent('postiz').getMemory();
+    const mastra = await this._mastraService.mastra(organization.id);
+    const memory = await (mastra.getAgent('postiz') as any).getMemory();
     try {
       return await memory.recall({
         resourceId: organization.id,
@@ -135,8 +135,8 @@ export class CopilotController {
   @Get('/list')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getList(@GetOrgFromRequest() organization: Organization) {
-    const mastra = await this._mastraService.mastra();
-    const memory = await mastra.getAgent('postiz').getMemory();
+    const mastra = await this._mastraService.mastra(organization.id);
+    const memory = await (mastra.getAgent('postiz') as any).getMemory();
     const list = await memory.listThreads({
       filter: { resourceId: organization.id },
       perPage: 100000,
@@ -145,7 +145,7 @@ export class CopilotController {
     });
 
     return {
-      threads: list.threads.map((p) => ({
+      threads: list.threads.map((p: any) => ({
         id: p.id,
         title: p.title,
       })),

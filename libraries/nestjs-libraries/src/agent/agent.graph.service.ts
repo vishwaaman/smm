@@ -6,7 +6,8 @@ import {
 } from '@langchain/core/messages';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { ChatOpenAI, DallEAPIWrapper } from '@langchain/openai';
-import { TavilySearch } from '@langchain/tavily';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { DynamicTool } from '@langchain/core/tools';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import dayjs from 'dayjs';
@@ -15,22 +16,9 @@ import { z } from 'zod';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { GeneratorDto } from '@gitroom/nestjs-libraries/dtos/generator/generator.dto';
-
-const tools = !process.env.TAVILY_API_KEY
-  ? []
-  : [new TavilySearch({ maxResults: 3 })];
-const toolNode = new ToolNode(tools);
-
-const model = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-proj-',
-  model: 'gpt-4.1',
-  temperature: 0.7,
-});
-
-const dalle = new DallEAPIWrapper({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-proj-',
-  model: 'dall-e-3',
-});
+import { OrganizationRepository } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.repository';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface WorkflowChannelsState {
   messages: BaseMessage[];
@@ -101,13 +89,78 @@ const contentZod = (
   });
 };
 
+type OrgAiConfig = {
+  openaiApiKey?: string | null;
+  googleAiApiKey?: string | null;
+  aiProvider?: string | null;
+};
+
+function createWebSearchTool(orgConfig: OrgAiConfig): DynamicTool {
+  return new DynamicTool({
+    name: 'web_search',
+    description:
+      'Search the web for current, up-to-date information about a topic',
+    func: async (query: string) => {
+      if (orgConfig.aiProvider === 'google' && orgConfig.googleAiApiKey) {
+        const genAI = new GoogleGenerativeAI(orgConfig.googleAiApiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          tools: [{ googleSearch: {} } as any],
+        });
+        const response = await model.generateContent(query);
+        return response.response.text();
+      }
+
+      const apiKey =
+        orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '';
+      const openai = new OpenAI({ apiKey });
+      const completion = await (openai.chat.completions as any).create({
+        model: 'gpt-4o-search-preview',
+        web_search_options: {},
+        messages: [{ role: 'user', content: query }],
+      });
+      return completion.choices[0].message.content || '';
+    },
+  });
+}
+
+function createDeps(orgConfig: OrgAiConfig) {
+  const useGoogle =
+    orgConfig.aiProvider === 'google' && !!orgConfig.googleAiApiKey;
+
+  const model = useGoogle
+    ? new ChatGoogleGenerativeAI({
+        apiKey: orgConfig.googleAiApiKey!,
+        model: 'gemini-2.5-flash',
+        temperature: 0.7,
+      })
+    : new ChatOpenAI({
+        apiKey: orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+        model: 'gpt-4.1',
+        temperature: 0.7,
+      });
+
+  const tools = [createWebSearchTool(orgConfig)];
+  const toolNode = new ToolNode(tools);
+
+  const dalle = new DallEAPIWrapper({
+    apiKey: orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+    model: 'dall-e-3',
+  });
+
+  return { model, tools, toolNode, dalle };
+}
+
 @Injectable()
 export class AgentGraphService {
   private storage = UploadFactory.createStorage();
+
   constructor(
     private _postsService: PostsService,
-    private _mediaService: MediaService
+    private _mediaService: MediaService,
+    private _orgRepository: OrganizationRepository
   ) {}
+
   static state = () =>
     new StateGraph<WorkflowChannelsState>({
       channels: {
@@ -131,89 +184,100 @@ export class AgentGraphService {
       },
     });
 
-  async startCall(state: WorkflowChannelsState) {
-    const runTools = model.bindTools(tools);
-    const response = await ChatPromptTemplate.fromTemplate(
-      `
+  async start(orgId: string, body: GeneratorDto) {
+    const org = await this._orgRepository.getOrgById(orgId);
+    const orgConfig: OrgAiConfig = {
+      openaiApiKey: (org as any).openaiApiKey,
+      googleAiApiKey: (org as any).googleAiApiKey,
+      aiProvider: (org as any).aiProvider,
+    };
+
+    const { model, tools, toolNode, dalle } = createDeps(orgConfig);
+
+    const startCall = async (state: WorkflowChannelsState) => {
+      const runTools = model.bindTools(tools);
+      const response = await ChatPromptTemplate.fromTemplate(
+        `
     Today is ${dayjs().format()}, You are an assistant that gets a social media post or requests for a social media post.
     You research should be on the most possible recent data.
     You concat the text of the request together with an internet research based on the text.
     {text}
     `
-    )
-      .pipe(runTools)
-      .invoke({
-        text: state.messages[state.messages.length - 1].content,
-      });
+      )
+        .pipe(runTools)
+        .invoke({
+          text: state.messages[state.messages.length - 1].content,
+        });
 
-    return { messages: [response] };
-  }
+      return { messages: [response] };
+    };
 
-  async saveResearch(state: WorkflowChannelsState) {
-    const content = state.messages.filter((f) => f instanceof ToolMessage);
-    return { fresearch: content };
-  }
+    const saveResearch = async (state: WorkflowChannelsState) => {
+      const content: BaseMessage[] = state.messages.filter(
+        (f) => f instanceof ToolMessage
+      );
+      return { fresearch: content };
+    };
 
-  async findCategories(state: WorkflowChannelsState) {
-    const allCategories = await this._postsService.findAllExistingCategories();
-    const structuredOutput = model.withStructuredOutput(category);
-    const { category: outputCategory } = await ChatPromptTemplate.fromTemplate(
-      `
+    const findCategories = async (state: WorkflowChannelsState) => {
+      const allCategories =
+        await this._postsService.findAllExistingCategories();
+      const structuredOutput = model.withStructuredOutput(category);
+      const { category: outputCategory } =
+        await ChatPromptTemplate.fromTemplate(
+          `
         You are an assistant that gets a text that will be later summarized into a social media post
         and classify it to one of the following categories: {categories}
         text: {text}
       `
-    )
-      .pipe(structuredOutput)
-      .invoke({
-        categories: allCategories.map((p) => p.category).join(', '),
-        text: state.fresearch,
-      });
+        )
+          .pipe(structuredOutput)
+          .invoke({
+            categories: allCategories.map((p) => p.category).join(', '),
+            text: state.fresearch,
+          });
 
-    return {
-      category: outputCategory,
+      return { category: outputCategory };
     };
-  }
 
-  async findTopic(state: WorkflowChannelsState) {
-    const allTopics = await this._postsService.findAllExistingTopicsOfCategory(
-      state?.category!
-    );
-    if (allTopics.length === 0) {
-      return { topic: null };
-    }
+    const findTopic = async (state: WorkflowChannelsState) => {
+      const allTopics =
+        await this._postsService.findAllExistingTopicsOfCategory(
+          state?.category!
+        );
+      if (allTopics.length === 0) {
+        return { topic: null };
+      }
 
-    const structuredOutput = model.withStructuredOutput(topic);
-    const { topic: outputTopic } = await ChatPromptTemplate.fromTemplate(
-      `
+      const structuredOutput = model.withStructuredOutput(topic);
+      const { topic: outputTopic } = await ChatPromptTemplate.fromTemplate(
+        `
         You are an assistant that gets a text that will be later summarized into a social media post
         and classify it to one of the following topics: {topics}
         text: {text}
       `
-    )
-      .pipe(structuredOutput)
-      .invoke({
-        topics: allTopics.map((p) => p.topic).join(', '),
-        text: state.fresearch,
-      });
+      )
+        .pipe(structuredOutput)
+        .invoke({
+          topics: allTopics.map((p) => p.topic).join(', '),
+          text: state.fresearch,
+        });
 
-    return {
-      topic: outputTopic,
+      return { topic: outputTopic };
     };
-  }
 
-  async findPopularPosts(state: WorkflowChannelsState) {
-    const popularPosts = await this._postsService.findPopularPosts(
-      state.category!,
-      state.topic
-    );
-    return { popularPosts };
-  }
+    const findPopularPosts = async (state: WorkflowChannelsState) => {
+      const popularPosts = await this._postsService.findPopularPosts(
+        state.category!,
+        state.topic
+      );
+      return { popularPosts };
+    };
 
-  async generateHook(state: WorkflowChannelsState) {
-    const structuredOutput = model.withStructuredOutput(hook);
-    const { hook: outputHook } = await ChatPromptTemplate.fromTemplate(
-      `
+    const generateHook = async (state: WorkflowChannelsState) => {
+      const structuredOutput = model.withStructuredOutput(hook);
+      const { hook: outputHook } = await ChatPromptTemplate.fromTemplate(
+        `
         You are an assistant that gets content for a social media post, and generate only the hook.
         The hook is the 1-2 sentences of the post that will be used to grab the attention of the reader.
         You will be provided existing hooks you should use as inspiration.
@@ -223,41 +287,39 @@ export class AgentGraphService {
         - Make sure it's engaging
         - Don't be cringy
         - Use simple english
-        - Make sure you add "\n" between the lines
+        - Make sure you add "\\n" between the lines
         - Don't take the hook from "request of the user"
 
         <!-- BEGIN request of the user -->
         {request}
         <!-- END request of the user -->
-        
+
         <!-- BEGIN existing hooks -->
         {hooks}
         <!-- END existing hooks -->
-        
+
         <!-- BEGIN current content -->
         {text}
         <!-- END current content -->
-       
-      `
-    )
-      .pipe(structuredOutput)
-      .invoke({
-        request: state.messages[0].content,
-        hooks: state.popularPosts!.map((p) => p.hook).join('\n'),
-        text: state.fresearch,
-      });
 
-    return {
-      hook: outputHook,
+      `
+      )
+        .pipe(structuredOutput)
+        .invoke({
+          request: state.messages[0].content,
+          hooks: state.popularPosts!.map((p) => p.hook).join('\n'),
+          text: state.fresearch,
+        });
+
+      return { hook: outputHook };
     };
-  }
 
-  async generateContent(state: WorkflowChannelsState) {
-    const structuredOutput = model.withStructuredOutput(
-      contentZod(!!state.isPicture, state.format)
-    );
-    const { content: outputContent } = await ChatPromptTemplate.fromTemplate(
-      `
+    const generateContent = async (state: WorkflowChannelsState) => {
+      const structuredOutput = model.withStructuredOutput(
+        contentZod(!!state.isPicture, state.format)
+      );
+      const { content: outputContent } = await ChatPromptTemplate.fromTemplate(
+        `
         You are an assistant that gets existing hook of a social media, content and generate only the content.
         - Don't add any hashtags
         - Make sure it sounds ${state.tone}
@@ -278,113 +340,96 @@ export class AgentGraphService {
         - Use simple english
         - The Content should not contain the hook
         - Try to put some call to action at the end of the post
-        - Make sure you add "\n" between the lines
-        - Add "\n" after every "."
-        
+        - Make sure you add "\\n" between the lines
+        - Add "\\n" after every "."
+
         Hook:
         {hook}
-        
+
         User request:
         {request}
-        
+
         current content information:
         {information}
       `
-    )
-      .pipe(structuredOutput)
-      .invoke({
-        hook: state.hook,
-        request: state.messages[0].content,
-        information: state.fresearch,
-      });
+      )
+        .pipe(structuredOutput)
+        .invoke({
+          hook: state.hook,
+          request: state.messages[0].content,
+          information: state.fresearch,
+        });
 
-    return {
-      content: outputContent,
+      return { content: outputContent };
     };
-  }
 
-  async fixArray(state: WorkflowChannelsState) {
-    if (state.format === 'one_short' || state.format === 'one_long') {
-      return {
-        content: [state.content],
-      };
-    }
-
-    return {};
-  }
-
-  async generatePictures(state: WorkflowChannelsState) {
-    if (!state.isPicture) {
+    const fixArray = async (state: WorkflowChannelsState) => {
+      if (state.format === 'one_short' || state.format === 'one_long') {
+        return { content: [state.content] };
+      }
       return {};
-    }
-
-    const newContent = await Promise.all(
-      (state.content || []).map(async (p) => {
-        const image = await dalle.invoke(p.prompt!);
-        return {
-          ...p,
-          image,
-        };
-      })
-    );
-
-    return {
-      content: newContent,
     };
-  }
 
-  async uploadPictures(state: WorkflowChannelsState) {
-    const all = await Promise.all(
-      (state.content || []).map(async (p) => {
-        if (p.image) {
-          const upload = await this.storage.uploadSimple(p.image);
-          const name = upload.split('/').pop()!;
-          const uploadWithId = await this._mediaService.saveFile(
-            state.orgId,
-            name,
-            upload
-          );
+    const generatePictures = async (state: WorkflowChannelsState) => {
+      if (!state.isPicture) {
+        return {};
+      }
 
-          return {
-            ...p,
-            image: uploadWithId,
-          };
-        }
+      const newContent = await Promise.all(
+        (state.content || []).map(async (p) => {
+          const image = await dalle.invoke(p.prompt!);
+          return { ...p, image };
+        })
+      );
 
-        return p;
-      })
-    );
+      return { content: newContent };
+    };
 
-    return { content: all };
-  }
+    const uploadPictures = async (state: WorkflowChannelsState) => {
+      const all = await Promise.all(
+        (state.content || []).map(async (p) => {
+          if (p.image) {
+            const upload = await this.storage.uploadSimple(p.image);
+            const name = upload.split('/').pop()!;
+            const uploadWithId = await this._mediaService.saveFile(
+              state.orgId,
+              name,
+              upload
+            );
+            return { ...p, image: uploadWithId };
+          }
+          return p;
+        })
+      );
 
-  async isGeneratePicture(state: WorkflowChannelsState) {
-    if (state.isPicture) {
-      return 'generate-picture';
-    }
+      return { content: all };
+    };
 
-    return 'post-time';
-  }
+    const isGeneratePicture = async (state: WorkflowChannelsState) => {
+      if (state.isPicture) {
+        return 'generate-picture';
+      }
+      return 'post-time';
+    };
 
-  async postDateTime(state: WorkflowChannelsState) {
-    return { date: await this._postsService.findFreeDateTime(state.orgId) };
-  }
+    const postDateTime = async (state: WorkflowChannelsState) => {
+      return { date: await this._postsService.findFreeDateTime(state.orgId) };
+    };
 
-  start(orgId: string, body: GeneratorDto) {
     const state = AgentGraphService.state();
     const workflow = state
-      .addNode('agent', this.startCall.bind(this))
+      .addNode('agent', startCall)
       .addNode('research', toolNode)
-      .addNode('save-research', this.saveResearch.bind(this))
-      .addNode('find-category', this.findCategories.bind(this))
-      .addNode('find-topic', this.findTopic.bind(this))
-      .addNode('find-popular-posts', this.findPopularPosts.bind(this))
-      .addNode('generate-hook', this.generateHook.bind(this))
-      .addNode('generate-content', this.generateContent.bind(this))
-      .addNode('generate-content-fix', this.fixArray.bind(this))
-      .addNode('generate-picture', this.generatePictures.bind(this))
-      .addNode('upload-pictures', this.uploadPictures.bind(this))
-      .addNode('post-time', this.postDateTime.bind(this))
+      .addNode('save-research', saveResearch)
+      .addNode('find-category', findCategories)
+      .addNode('find-topic', findTopic)
+      .addNode('find-popular-posts', findPopularPosts)
+      .addNode('generate-hook', generateHook)
+      .addNode('generate-content', generateContent)
+      .addNode('generate-content-fix', fixArray)
+      .addNode('generate-picture', generatePictures)
+      .addNode('upload-pictures', uploadPictures)
+      .addNode('post-time', postDateTime)
       .addEdge(START, 'agent')
       .addEdge('agent', 'research')
       .addEdge('research', 'save-research')
@@ -394,10 +439,7 @@ export class AgentGraphService {
       .addEdge('find-popular-posts', 'generate-hook')
       .addEdge('generate-hook', 'generate-content')
       .addEdge('generate-content', 'generate-content-fix')
-      .addConditionalEdges(
-        'generate-content-fix',
-        this.isGeneratePicture.bind(this)
-      )
+      .addConditionalEdges('generate-content-fix', isGeneratePicture)
       .addEdge('generate-picture', 'upload-pictures')
       .addEdge('upload-pictures', 'post-time')
       .addEdge('post-time', END);
