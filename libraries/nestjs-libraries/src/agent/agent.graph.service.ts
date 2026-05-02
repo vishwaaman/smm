@@ -6,7 +6,6 @@ import {
 } from '@langchain/core/messages';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { ChatOpenAI, DallEAPIWrapper } from '@langchain/openai';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { DynamicTool } from '@langchain/core/tools';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
@@ -129,10 +128,13 @@ function createDeps(orgConfig: OrgAiConfig) {
     orgConfig.aiProvider === 'google' && !!orgConfig.googleAiApiKey;
 
   const model = useGoogle
-    ? new ChatGoogleGenerativeAI({
+    ? new ChatOpenAI({
         apiKey: orgConfig.googleAiApiKey!,
         model: 'gemini-2.5-flash',
         temperature: 0.7,
+        configuration: {
+          baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        },
       })
     : new ChatOpenAI({
         apiKey: orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
