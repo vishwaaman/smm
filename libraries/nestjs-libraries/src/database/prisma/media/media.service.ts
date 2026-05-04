@@ -37,15 +37,16 @@ export class MediaService {
     org: Organization,
     generatePromptFirst?: boolean
   ) {
+    const apiKey = (org as any).openaiApiKey || process.env.OPENAI_API_KEY || '';
     const generating = await this._subscriptionService.useCredit(
       org,
       'ai_images',
       async () => {
         if (generatePromptFirst) {
-          prompt = await this._openAi.generatePromptForPicture(prompt);
+          prompt = await this._openAi.generatePromptForPicture(prompt, apiKey);
           console.log('Prompt:', prompt);
         }
-        return this._openAi.generateImage(prompt, !!generatePromptFirst);
+        return this._openAi.generateImage(prompt, !!generatePromptFirst, false, apiKey);
       }
     );
 
