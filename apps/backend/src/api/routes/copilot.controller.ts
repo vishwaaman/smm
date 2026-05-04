@@ -54,7 +54,7 @@ export class CopilotController {
       endpoint: '/copilot/chat',
       runtime: new CopilotRuntime(),
       serviceAdapter: new OpenAIAdapter({
-        openai: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+        openai: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) as any,
         model: 'gpt-4.1',
       }),
     });
@@ -107,7 +107,7 @@ export class CopilotController {
       serviceAdapter = new GoogleGenerativeAIAdapter({ model: googleGenAI.getGenerativeModel({ model: "gemini-1.5-pro" }) });
     } else {
       const openai = new OpenAI({ apiKey: openaiApiKey });
-      serviceAdapter = new OpenAIAdapter({ openai, model: 'gpt-4.1' });
+      serviceAdapter = new OpenAIAdapter({ openai: openai as any, model: 'gpt-4.1' });
     }
 
     const copilotRuntimeHandler = copilotRuntimeNextJSAppRouterEndpoint({
