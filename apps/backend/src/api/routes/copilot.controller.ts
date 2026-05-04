@@ -7,13 +7,17 @@ import {
   Res,
   Query,
   Param,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   CopilotRuntime,
   OpenAIAdapter,
+  GoogleGenerativeAIAdapter,
   copilotRuntimeNodeHttpEndpoint,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
+import { OpenAI } from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
@@ -50,6 +54,7 @@ export class CopilotController {
       endpoint: '/copilot/chat',
       runtime: new CopilotRuntime(),
       serviceAdapter: new OpenAIAdapter({
+        openai: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
         model: 'gpt-4.1',
       }),
     });
@@ -64,14 +69,19 @@ export class CopilotController {
     @Res() res: Response,
     @GetOrgFromRequest() organization: Organization
   ) {
-    if (
-      process.env.OPENAI_API_KEY === undefined ||
-      process.env.OPENAI_API_KEY === ''
-    ) {
-      Logger.warn('OpenAI API key not set, chat functionality will not work');
-      return;
+    const openaiApiKey = (organization as any).openaiApiKey || process.env.OPENAI_API_KEY || '';
+    const useGoogle = (organization as any).aiProvider === 'google' && !!(organization as any).googleAiApiKey;
+
+    if (!useGoogle && !openaiApiKey) {
+      Logger.warn('No AI API key found, chat functionality will not work');
+      throw new BadRequestException('AI Agent not configured for this organization');
     }
+
     const mastra = await this._mastraService.mastra(organization.id);
+    const postizAgent = mastra.getAgent('postiz');
+    if (!postizAgent) {
+      throw new BadRequestException('AI Agent could not be initialized');
+    }
     const requestContext = new RequestContext<ChannelsContext>();
     requestContext.set(
       'integrations',
@@ -91,13 +101,20 @@ export class CopilotController {
       agents,
     });
 
+    let serviceAdapter;
+    if (useGoogle) {
+      const googleGenAI = new GoogleGenerativeAI((organization as any).googleAiApiKey!);
+      serviceAdapter = new GoogleGenerativeAIAdapter({ model: googleGenAI.getGenerativeModel({ model: "gemini-1.5-pro" }) });
+    } else {
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      serviceAdapter = new OpenAIAdapter({ openai, model: 'gpt-4.1' });
+    }
+
     const copilotRuntimeHandler = copilotRuntimeNextJSAppRouterEndpoint({
       endpoint: '/copilot/agent',
       runtime,
       // properties: req.body.variables.properties,
-      serviceAdapter: new OpenAIAdapter({
-        model: 'gpt-4.1',
-      }),
+      serviceAdapter,
     });
 
     return copilotRuntimeHandler.handleRequest(req, res);
@@ -121,7 +138,11 @@ export class CopilotController {
     @Param('thread') threadId: string
   ): Promise<any> {
     const mastra = await this._mastraService.mastra(organization.id);
-    const memory = await (mastra.getAgent('postiz') as any).getMemory();
+    const agent = mastra.getAgent('postiz');
+    if (!agent) {
+      return { messages: [] };
+    }
+    const memory = await (agent as any).getMemory();
     try {
       return await memory.recall({
         resourceId: organization.id,
@@ -136,7 +157,11 @@ export class CopilotController {
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   async getList(@GetOrgFromRequest() organization: Organization) {
     const mastra = await this._mastraService.mastra(organization.id);
-    const memory = await (mastra.getAgent('postiz') as any).getMemory();
+    const agent = mastra.getAgent('postiz');
+    if (!agent) {
+      return { threads: [] };
+    }
+    const memory = await (agent as any).getMemory();
     const list = await memory.listThreads({
       filter: { resourceId: organization.id },
       perPage: 100000,

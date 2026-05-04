@@ -35,10 +35,12 @@ export class MastraService {
       };
     }
 
+    const postizAgent = await this._loadToolsService.agent(orgConfig);
+
     const instance = new Mastra({
       storage: pStore,
       agents: {
-        postiz: await this._loadToolsService.agent(orgConfig),
+        ...(postizAgent ? { postiz: postizAgent } : {}),
       },
       logger: new ConsoleLogger({
         level: 'info',

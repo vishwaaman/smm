@@ -53,13 +53,17 @@ export class LoadToolsService {
     const useGoogle =
       orgConfig.aiProvider === 'google' && !!orgConfig.googleAiApiKey;
 
+    const openaiApiKey = orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '';
+    if (!useGoogle && !openaiApiKey) {
+      return null;
+    }
+
     const model = useGoogle
       ? createGoogleGenerativeAI({ apiKey: orgConfig.googleAiApiKey! })(
           'gemini-2.5-flash'
         )
       : createOpenAI({
-          apiKey:
-            orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '',
+          apiKey: openaiApiKey,
         })('gpt-4.1');
 
     return new Agent({
