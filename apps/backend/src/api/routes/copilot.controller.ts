@@ -12,12 +12,10 @@ import {
 import {
   CopilotRuntime,
   OpenAIAdapter,
-  GoogleGenerativeAIAdapter,
   copilotRuntimeNodeHttpEndpoint,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
 import { OpenAI } from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
@@ -103,8 +101,11 @@ export class CopilotController {
 
     let serviceAdapter;
     if (useGoogle) {
-      const googleGenAI = new GoogleGenerativeAI((organization as any).googleAiApiKey!);
-      serviceAdapter = new GoogleGenerativeAIAdapter({ model: googleGenAI.getGenerativeModel({ model: "gemini-1.5-pro" }) });
+      const openai = new OpenAI({
+        apiKey: (organization as any).googleAiApiKey,
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      });
+      serviceAdapter = new OpenAIAdapter({ openai: openai as any, model: 'gemini-1.5-pro' });
     } else {
       const openai = new OpenAI({ apiKey: openaiApiKey });
       serviceAdapter = new OpenAIAdapter({ openai: openai as any, model: 'gpt-4.1' });
