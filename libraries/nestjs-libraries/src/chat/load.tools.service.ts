@@ -53,10 +53,7 @@ export class LoadToolsService {
     const useGoogle =
       orgConfig.aiProvider === 'google' && !!orgConfig.googleAiApiKey;
 
-    const openaiApiKey = orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || '';
-    if (!useGoogle && !openaiApiKey) {
-      return null;
-    }
+    const openaiApiKey = orgConfig.openaiApiKey || process.env.OPENAI_API_KEY || 'sk-placeholder';
 
     const model = useGoogle
       ? createGoogleGenerativeAI({ apiKey: orgConfig.googleAiApiKey! })(

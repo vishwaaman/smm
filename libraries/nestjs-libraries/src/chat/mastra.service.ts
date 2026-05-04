@@ -40,7 +40,7 @@ export class MastraService {
     const instance = new Mastra({
       storage: pStore,
       agents: {
-        ...(postizAgent ? { postiz: postizAgent } : {}),
+        postiz: postizAgent!,
       },
       logger: new ConsoleLogger({
         level: 'info',
