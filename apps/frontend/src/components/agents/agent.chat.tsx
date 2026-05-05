@@ -94,12 +94,14 @@ const LoadMessages: FC<{ id: string }> = ({ id }) => {
   const loadMessages = useCallback(async (idToSet: string) => {
     const data = await (await fetch(`/copilot/${idToSet}/list`)).json();
     setMessages(
-      data.uiMessages.map((p: any) => {
-        return new TextMessage({
-          content: p.content,
-          role: p.role,
-        });
-      })
+      (data.uiMessages || [])
+        .filter((p: any) => typeof p.content === 'string')
+        .map((p: any) => {
+          return new TextMessage({
+            content: p.content,
+            role: p.role,
+          });
+        })
     );
   }, []);
 
