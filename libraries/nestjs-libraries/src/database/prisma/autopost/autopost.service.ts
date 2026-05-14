@@ -19,6 +19,7 @@ import { TypedSearchAttributes } from '@temporalio/common';
 import {
   organizationId,
 } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
+import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
 const parser = new Parser();
 
 interface WorkflowChannelsState {
@@ -28,23 +29,13 @@ interface WorkflowChannelsState {
   description: string;
   image: string;
   id: string;
+  openaiApiKey: string;
   load: {
     date: string;
     url: string;
     description: string;
   };
 }
-
-const model = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-proj-',
-  model: 'gpt-4.1',
-  temperature: 0.7,
-});
-
-const dalle = new DallEAPIWrapper({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-proj-',
-  model: 'gpt-image-1',
-});
 
 const generateContent = z.object({
   socialMediaPostContent: z
@@ -64,7 +55,8 @@ export class AutopostService {
     private _autopostsRepository: AutopostRepository,
     private _temporalService: TemporalService,
     private _integrationService: IntegrationService,
-    private _postsService: PostsService
+    private _postsService: PostsService,
+    private _organizationService: OrganizationService
   ) {}
 
   async stopAll(org: string) {
@@ -215,6 +207,7 @@ export class AutopostService {
       };
     }
 
+    const model = new ChatOpenAI({ apiKey: state.openaiApiKey, model: 'gpt-4.1', temperature: 0.7 });
     const structuredOutput = model.withStructuredOutput(generateContent);
     const { socialMediaPostContent } = await ChatPromptTemplate.fromTemplate(
       `
@@ -242,12 +235,14 @@ export class AutopostService {
   }
 
   async generatePicture(state: WorkflowChannelsState) {
+    const model = new ChatOpenAI({ apiKey: state.openaiApiKey, model: 'gpt-4.1', temperature: 0.7 });
+    const dalle = new DallEAPIWrapper({ apiKey: state.openaiApiKey, model: 'gpt-image-1' });
     const structuredOutput = model.withStructuredOutput(dallePrompt);
     const { generatedTextToBeSentToDallE } =
       await ChatPromptTemplate.fromTemplate(
         `
         You are an assistant that gets description and generate a prompt that will be sent to DallE to generate pictures.
-        
+
         content:
         {content}
       `
@@ -359,6 +354,9 @@ export class AutopostService {
       .addEdge('schedule-post', 'update-url')
       .addEdge('update-url', END);
 
+    const org = await this._organizationService.getOrgById(getPost.organizationId);
+    const openaiApiKey = (org as any)?.openaiApiKey || process.env.OPENAI_API_KEY || 'sk-proj-';
+
     const app = workflow.compile();
     await app.invoke({
       messages: [],
@@ -366,6 +364,7 @@ export class AutopostService {
       body: getPost,
       load,
       integrations: integrationsToSend,
+      openaiApiKey,
     });
   }
 }

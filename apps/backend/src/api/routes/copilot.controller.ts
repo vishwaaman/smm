@@ -39,23 +39,41 @@ export class CopilotController {
     private _mastraService: MastraService
   ) {}
   @Post('/chat')
-  chatAgent(@Req() req: Request, @Res() res: Response) {
-    if (
-      process.env.OPENAI_API_KEY === undefined ||
-      process.env.OPENAI_API_KEY === ''
-    ) {
+  chatAgent(
+    @GetOrgFromRequest() organization: Organization,
+    @Req() req: Request,
+    @Res() res: Response
+  ) {
+    const useGoogle =
+      (organization as any).aiProvider === 'google' &&
+      !!(organization as any).googleAiApiKey;
+    const orgOpenaiKey = (organization as any).openaiApiKey;
+    const apiKey =
+      orgOpenaiKey || process.env.OPENAI_API_KEY || '';
+
+    if (!useGoogle && !apiKey) {
       Logger.warn('OpenAI API key not set, chat functionality will not work');
       res.status(503).json({ error: 'OpenAI API key not configured' });
       return;
     }
 
+    let openai: OpenAI;
+    let model: string;
+    if (useGoogle) {
+      openai = new OpenAI({
+        apiKey: (organization as any).googleAiApiKey,
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      });
+      model = 'gemini-1.5-pro';
+    } else {
+      openai = new OpenAI({ apiKey });
+      model = 'gpt-4.1';
+    }
+
     const copilotRuntimeHandler = copilotRuntimeNodeHttpEndpoint({
       endpoint: '/copilot/chat',
       runtime: new CopilotRuntime(),
-      serviceAdapter: new OpenAIAdapter({
-        openai: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) as any,
-        model: 'gpt-4.1',
-      }),
+      serviceAdapter: new OpenAIAdapter({ openai: openai as any, model }),
     });
 
     return copilotRuntimeHandler(req, res);
