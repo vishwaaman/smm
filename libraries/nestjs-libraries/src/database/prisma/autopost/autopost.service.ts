@@ -171,6 +171,7 @@ export class AutopostService {
         image: null,
         integrations: null,
         id: null,
+        openaiApiKey: null,
       },
     });
 
