@@ -75,6 +75,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
       <CopilotKit
         credentials="include"
         runtimeUrl={backendUrl + '/copilot/chat'}
+        headers={{ showorg: user.orgId }}
         showDevConsole={false}
       >
         <MantineWrapper>
