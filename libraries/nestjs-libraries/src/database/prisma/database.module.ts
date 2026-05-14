@@ -45,6 +45,8 @@ import { ApprovalRepository } from '@gitroom/nestjs-libraries/database/prisma/ap
 import { ApprovalService } from '@gitroom/nestjs-libraries/database/prisma/approvals/approval.service';
 import { AgentConfigRepository } from '@gitroom/nestjs-libraries/database/prisma/agent-config/agent-config.repository';
 import { CustomAgentsService } from '@gitroom/nestjs-libraries/agents/custom-agents.service';
+import { ErrorLogRepository } from '@gitroom/nestjs-libraries/database/prisma/error-log/error-log.repository';
+import { ErrorLogService } from '@gitroom/nestjs-libraries/database/prisma/error-log/error-log.service';
 
 @Global()
 @Module({
@@ -99,6 +101,8 @@ import { CustomAgentsService } from '@gitroom/nestjs-libraries/agents/custom-age
     ApprovalService,
     AgentConfigRepository,
     CustomAgentsService,
+    ErrorLogRepository,
+    ErrorLogService,
   ],
   get exports() {
     return this.providers;

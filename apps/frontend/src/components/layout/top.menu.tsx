@@ -172,6 +172,22 @@ export const useMenuItem = () => {
 
   const secondMenu = [
     {
+      name: 'Error Log',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="21" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M12 9V13M12 17H12.01M10.29 3.86L1.82 18C1.64 18.3 1.54 18.65 1.54 19C1.54 19.35 1.64 19.7 1.82 20C2 20.3 2.27 20.54 2.59 20.7C2.91 20.86 3.27 20.94 3.63 20.94H20.37C20.73 20.94 21.09 20.86 21.41 20.7C21.73 20.54 22 20.3 22.18 20C22.36 19.7 22.46 19.35 22.46 19C22.46 18.65 22.36 18.3 22.18 18L13.71 3.86C13.53 3.56 13.26 3.32 12.94 3.15C12.62 2.98 12.26 2.9 11.9 2.9C11.54 2.9 11.18 2.98 10.86 3.15C10.54 3.32 10.27 3.56 10.09 3.86H10.29Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/error-log',
+      role: ['ADMIN', 'SUPERADMIN'],
+    },
+    {
       name: t('UGC', 'UGC'),
       icon: (
         <svg

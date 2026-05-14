@@ -41,6 +41,7 @@ import { StreakComponent } from '@gitroom/frontend/components/layout/streak.comp
 import { PreConditionComponent } from '@gitroom/frontend/components/layout/pre-condition.component';
 import { AttachToFeedbackIcon } from '@gitroom/frontend/components/new-layout/sentry.feedback.component';
 import { FirstBillingComponent } from '@gitroom/frontend/components/billing/first.billing.component';
+import { ErrorBoundary, GlobalErrorListener } from '@gitroom/frontend/components/error-log/error.boundary';
 
 const jakartaSans = Plus_Jakarta_Sans({
   weight: ['600', '500', '700'],
@@ -70,6 +71,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
 
   return (
     <ContextWrapper user={user}>
+      <GlobalErrorListener />
       <CopilotKit
         credentials="include"
         runtimeUrl={backendUrl + '/copilot/chat'}
@@ -134,7 +136,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                           <NotificationComponent />
                         </div>
                       </div>
-                      <div className="flex flex-1 gap-[1px]">{children}</div>
+                      <div className="flex flex-1 gap-[1px]"><ErrorBoundary>{children}</ErrorBoundary></div>
                     </div>
                   </div>
                 </>

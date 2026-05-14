@@ -48,6 +48,7 @@ model Organization {
   anthropicApiKey     String?
   googleAiApiKey      String?
   aiProvider          String?
+  errorLogs           ErrorLog[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -118,6 +119,7 @@ model User {
   sendFailureEmails     Boolean              @default(true)
   sendStreakEmails      Boolean              @default(true)
   oauthAuthorizations   OAuthAuthorization[]
+  errorLogs             ErrorLog[]
 
   @@unique([email, providerName])
   @@index([lastReadNotifications])
@@ -992,4 +994,25 @@ model AgentConfig {
 
   @@unique([organizationId, agentType])
   @@index([organizationId])
+}
+
+model ErrorLog {
+  id             String        @id @default(uuid())
+  source         String
+  message        String
+  stack          String?       @db.Text
+  endpoint       String?
+  method         String?
+  requestBody    String?       @db.Text
+  statusCode     Int?
+  userId         String?
+  organizationId String?
+  createdAt      DateTime      @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([source])
 }
